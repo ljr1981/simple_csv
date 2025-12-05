@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>simple_csv - RFC 4180 CSV Parsing for Eiffel</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" type="image/png" href="images/logo.png">
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            <img src="images/logo.png" alt="simple_* logo" class="logo">
+        </div>
+        <h1>simple_csv</h1>
+        <p class="tagline">RFC 4180 Compliant CSV Parsing for Eiffel</p>
+        <div class="badges">
+            <span class="badge badge-rfc">RFC 4180</span>
+            <span class="badge badge-version">v1.0.0</span>
+            <span class="badge badge-license">MIT</span>
+        </div>
+    </header>
+
+    <nav>
+        <ul>
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#quick-start">Quick Start</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="api/simple_csv.html">API Reference</a></li>
+            <li><a href="https://github.com/ljr1981/simple_csv">GitHub</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>
+                <strong>simple_csv</strong> is a lightweight, RFC 4180 compliant CSV parsing
+                and generation library for Eiffel. It handles quoted fields, embedded commas,
+                escaped quotes, and multi-line fields with full Design by Contract support.
+            </p>
+            <p>
+                Part of the <strong>simple_*</strong> ecosystem of focused, single-purpose Eiffel libraries.
+            </p>
+        </section>
+
+        <section id="quick-start">
+            <h2>Quick Start</h2>
+
+            <div class="quick-start">
+                <h3>Installation</h3>
+                <p>Add to your ECF file:</p>
+<pre><code>&lt;library name="simple_csv" location="$SIMPLE_CSV/simple_csv.ecf"/&gt;</code></pre>
+                <p>Set environment variable:</p>
+<pre><code>set SIMPLE_CSV=D:\path\to\simple_csv</code></pre>
+            </div>
+
+            <h3>Basic Parsing</h3>
+<pre><code><span class="keyword">local</span>
+    csv: <span class="type">SIMPLE_CSV</span>
+<span class="keyword">do</span>
+    <span class="keyword">create</span> csv.make
+    csv.parse (<span class="string">"name,age,city%NJohn,30,NYC%NJane,25,LA"</span>)
+
+    <span class="comment">-- Access by row/column (1-based)</span>
+    print (csv.field (1, 1))  <span class="comment">-- "name"</span>
+    print (csv.field (2, 2))  <span class="comment">-- "30"</span>
+<span class="keyword">end</span></code></pre>
+
+            <h3>With Header Row</h3>
+<pre><code><span class="keyword">create</span> csv.make_with_header
+csv.parse (<span class="string">"name,age,city%NJohn,30,NYC%NJane,25,LA"</span>)
+
+<span class="comment">-- Access by column name (case-insensitive)</span>
+print (csv.field_by_name (1, <span class="string">"age"</span>))   <span class="comment">-- "30"</span>
+print (csv.field_by_name (2, <span class="string">"name"</span>))  <span class="comment">-- "Jane"</span></code></pre>
+
+            <h3>Custom Delimiters</h3>
+<pre><code><span class="comment">-- Tab-separated values</span>
+<span class="keyword">create</span> csv.make_with_delimiter (<span class="string">'%T'</span>)
+csv.parse (<span class="string">"a%Tb%Tc%N1%T2%T3"</span>)
+
+<span class="comment">-- Semicolon-separated (European locale)</span>
+<span class="keyword">create</span> csv.make_with_delimiter (<span class="string">';'</span>)
+csv.parse (<span class="string">"a;b;c"</span>)</code></pre>
+        </section>
+
+        <section id="features">
+            <h2>Features</h2>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>RFC 4180 Compliant</h4>
+                    <p>Handles quoted fields, embedded commas, escaped quotes (""), and multi-line values correctly.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Header Support</h4>
+                    <p>Optional first-row headers with case-insensitive column name lookup via <code>field_by_name</code>.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Custom Delimiters</h4>
+                    <p>Support for comma, tab, semicolon, or any custom delimiter character.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>CSV Generation</h4>
+                    <p>Build CSV data programmatically and export with proper escaping and quoting.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Row/Column Access</h4>
+                    <p>Get entire rows, columns, or individual fields with 1-based indexing.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Design by Contract</h4>
+                    <p>Full preconditions, postconditions, and loop invariants for correctness verification.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="api-summary">
+            <h2>API Summary</h2>
+
+            <h3>Initialization</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>make</code></td>
+                        <td>Create parser with comma delimiter</td>
+                    </tr>
+                    <tr>
+                        <td><code>make_with_header</code></td>
+                        <td>First row is treated as header</td>
+                    </tr>
+                    <tr>
+                        <td><code>make_with_delimiter (char)</code></td>
+                        <td>Use custom delimiter character</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Parsing</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>parse (a_input)</code></td>
+                        <td>Parse CSV from string</td>
+                    </tr>
+                    <tr>
+                        <td><code>parse_file (a_path)</code></td>
+                        <td>Parse CSV from file</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Access</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>field (row, col)</code></td>
+                        <td>Get field at row/column (1-based)</td>
+                    </tr>
+                    <tr>
+                        <td><code>field_by_name (row, name)</code></td>
+                        <td>Get field by column name</td>
+                    </tr>
+                    <tr>
+                        <td><code>row (n)</code></td>
+                        <td>Get all fields in row n</td>
+                    </tr>
+                    <tr>
+                        <td><code>column (n)</code></td>
+                        <td>Get all values in column n</td>
+                    </tr>
+                    <tr>
+                        <td><code>column_by_name (name)</code></td>
+                        <td>Get column values by name</td>
+                    </tr>
+                    <tr>
+                        <td><code>headers</code></td>
+                        <td>Get header row names</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Query</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>row_count</code></td>
+                        <td>Number of data rows (excludes header)</td>
+                    </tr>
+                    <tr>
+                        <td><code>column_count</code></td>
+                        <td>Number of columns</td>
+                    </tr>
+                    <tr>
+                        <td><code>has_column (name)</code></td>
+                        <td>Check if column exists</td>
+                    </tr>
+                    <tr>
+                        <td><code>column_index (name)</code></td>
+                        <td>Get 1-based index of column</td>
+                    </tr>
+                    <tr>
+                        <td><code>is_empty</code></td>
+                        <td>No data rows?</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Generation</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>to_csv</code></td>
+                        <td>Generate CSV string from data</td>
+                    </tr>
+                    <tr>
+                        <td><code>add_data_row (fields)</code></td>
+                        <td>Add a data row</td>
+                    </tr>
+                    <tr>
+                        <td><code>set_headers (names)</code></td>
+                        <td>Set header row</td>
+                    </tr>
+                    <tr>
+                        <td><code>clear</code></td>
+                        <td>Clear all data</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p><a href="api/simple_csv.html">View complete API reference &rarr;</a></p>
+        </section>
+
+        <section id="testing">
+            <h2>Testing</h2>
+            <p>
+                The library includes a comprehensive test suite with <strong>25+ tests</strong> covering:
+            </p>
+            <ul>
+                <li>Basic parsing with single and multiple rows</li>
+                <li>Quoted fields with embedded commas, quotes, and newlines</li>
+                <li>Header row handling and column name lookup</li>
+                <li>Custom delimiters (tab, semicolon)</li>
+                <li>CSV generation and roundtrip encoding</li>
+                <li>Edge cases (empty fields, empty strings, CRLF line endings)</li>
+            </ul>
+<pre><code><span class="comment">-- Run tests</span>
+ec.exe -batch -config simple_csv.ecf -target simple_csv_tests -tests</code></pre>
+        </section>
+    </main>
+
+    <footer>
+        <p>
+            <strong>simple_csv</strong> is part of the
+            <a href="https://github.com/ljr1981">simple_*</a> ecosystem
+        </p>
+        <p class="copyright">
+            Copyright &copy; 2024-2025 Larry Rix. MIT License.
+        </p>
+    </footer>
+</body>
+</html>
