@@ -4,7 +4,7 @@
 
 # simple_csv
 
-**[Documentation](https://ljr1981.github.io/simple_csv/)**
+**[Documentation](https://ljr1981.github.io/simple_csv/)** | **[Watch the Build Video](https://youtu.be/0FRqhC2IiG8)**
 
 Lightweight RFC 4180 compliant CSV parsing and generation library for Eiffel.
 
