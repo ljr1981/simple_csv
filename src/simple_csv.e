@@ -9,6 +9,10 @@ note
 		- Header row handling
 		- Row and column access
 		- CSV generation from data
+		- UTF-8 BOM support for Excel compatibility
+		- Lenient parsing mode with error collection
+		- Row-by-row iteration for large files
+		- Null value handling
 
 		Usage:
 			create csv.make
@@ -19,6 +23,9 @@ note
 			create csv.make_with_header
 			csv.parse (data)
 			age := csv.field_by_name (2, "age")
+
+			-- For Excel compatibility
+			excel_output := csv.to_csv_with_bom
 	]"
 	author: "Larry Rix"
 	date: "$Date$"
@@ -43,14 +50,19 @@ feature {NONE} -- Initialization
 			delimiter := ','
 			quote_char := '"'
 			has_header := False
+			lenient_mode := False
 			create rows.make (10)
 			create header_map.make (10)
+			create parse_errors.make (0)
+			null_representation := Void
+			iteration_index := 0
 		ensure
 			comma_delimiter: delimiter = ','
 			default_quote: quote_char = '"'
 			no_header: not has_header
 			rows_empty: rows.is_empty
 			header_map_empty: header_map.is_empty
+			not_lenient: not lenient_mode
 		end
 
 	make_with_header
@@ -85,6 +97,7 @@ feature -- Parsing
 
 	parse (a_input: STRING)
 			-- Parse CSV data from `a_input'.
+			-- Automatically handles UTF-8 BOM if present.
 		require
 			input_not_void: a_input /= Void
 		local
@@ -94,12 +107,18 @@ feature -- Parsing
 			c: CHARACTER
 			in_quotes: BOOLEAN
 			l_input: STRING
+			l_row_number: INTEGER
 		do
 			rows.wipe_out
 			header_map.wipe_out
+			parse_errors.wipe_out
+			l_row_number := 1
+
+			-- Strip BOM if present
+			l_input := strip_bom (a_input)
 
 			-- Normalize line endings
-			l_input := a_input.twin
+			l_input := l_input.twin
 			l_input.replace_substring_all ("%R%N", "%N")
 			l_input.replace_substring_all ("%R", "%N")
 
@@ -138,9 +157,14 @@ feature -- Parsing
 						l_row.extend (l_field.twin)
 						l_field.wipe_out
 						if not l_row.is_empty then
-							add_row (l_row)
+							if lenient_mode then
+								add_row_lenient (l_row, l_row_number)
+							else
+								add_row (l_row)
+							end
 							create l_row.make (10)
 						end
+						l_row_number := l_row_number + 1
 					else
 						l_field.append_character (c)
 					end
@@ -154,7 +178,11 @@ feature -- Parsing
 			-- Handle last field/row
 			if not l_field.is_empty or not l_row.is_empty then
 				l_row.extend (l_field.twin)
-				add_row (l_row)
+				if lenient_mode then
+					add_row_lenient (l_row, l_row_number)
+				else
+					add_row (l_row)
+				end
 			end
 
 			-- Build header map if needed
@@ -319,6 +347,101 @@ feature -- Access
 			result_not_void: Result /= Void
 		end
 
+feature -- Null Value Handling
+
+	set_null_representation (a_null: detachable STRING)
+			-- Set the string that represents null values.
+			-- Pass Void to disable null handling.
+		do
+			null_representation := a_null
+		ensure
+			null_set: null_representation = a_null
+		end
+
+	null_representation: detachable STRING
+			-- String that represents null values (e.g., "", "NULL", "NA").
+
+	is_null (a_row, a_column: INTEGER): BOOLEAN
+			-- Is the field at `a_row', `a_column' a null value?
+		require
+			valid_row: a_row >= 1 and a_row <= row_count
+			valid_column: a_column >= 1 and a_column <= column_count
+		local
+			l_value: STRING
+		do
+			l_value := field (a_row, a_column)
+			if attached null_representation as l_null then
+				Result := l_value.same_string (l_null)
+			else
+				-- Without explicit null representation, empty string is null
+				Result := l_value.is_empty
+			end
+		end
+
+	is_null_by_name (a_row: INTEGER; a_column_name: STRING): BOOLEAN
+			-- Is the field at `a_row', column named `a_column_name' a null value?
+		require
+			has_header: has_header
+			valid_row: a_row >= 1 and a_row <= row_count
+			valid_column_name: has_column (a_column_name)
+		do
+			Result := is_null (a_row, column_index (a_column_name))
+		end
+
+feature -- Row Iteration
+
+	start_iteration
+			-- Start row-by-row iteration from first data row.
+			-- After calling start_iteration, call next_row to advance to first row.
+		do
+			iteration_index := 0
+		ensure
+			at_start: iteration_index = 0
+		end
+
+	next_row: BOOLEAN
+			-- Move to next row. Returns True if there is a next row.
+		do
+			iteration_index := iteration_index + 1
+			Result := iteration_index <= row_count
+		end
+
+	current_row: ARRAYED_LIST [STRING]
+			-- Get current row in iteration.
+		require
+			valid_iteration: iteration_index >= 1 and iteration_index <= row_count
+		do
+			Result := row (iteration_index)
+		ensure
+			result_not_void: Result /= Void
+		end
+
+	current_field (a_column: INTEGER): STRING
+			-- Get field at `a_column' in current iteration row.
+		require
+			valid_iteration: iteration_index >= 1 and iteration_index <= row_count
+			valid_column: a_column >= 1 and a_column <= column_count
+		do
+			Result := field (iteration_index, a_column)
+		ensure
+			result_not_void: Result /= Void
+		end
+
+	current_field_by_name (a_column_name: STRING): STRING
+			-- Get field by name in current iteration row.
+		require
+			has_header: has_header
+			valid_iteration: iteration_index >= 1 and iteration_index <= row_count
+			valid_column_name: has_column (a_column_name)
+		do
+			Result := field_by_name (iteration_index, a_column_name)
+		ensure
+			result_not_void: Result /= Void
+		end
+
+	iteration_index: INTEGER
+			-- Current row index in iteration (1-based data row).
+
 feature -- Query
 
 	has_column (a_name: STRING): BOOLEAN
@@ -384,6 +507,15 @@ feature -- Generation
 			end
 		ensure
 			result_not_void: Result /= Void
+		end
+
+	to_csv_with_bom: STRING
+			-- Generate CSV string with UTF-8 BOM for Excel compatibility.
+		do
+			Result := Utf8_bom + to_csv
+		ensure
+			result_not_void: Result /= Void
+			has_bom: Result.count >= 3 implies (Result [1].code = 0xEF and Result [2].code = 0xBB and Result [3].code = 0xBF)
 		end
 
 	add_data_row (a_fields: ARRAY [STRING])
@@ -460,9 +592,12 @@ feature -- Generation
 		do
 			rows.wipe_out
 			header_map.wipe_out
+			parse_errors.wipe_out
+			iteration_index := 0
 		ensure
 			rows_empty: rows.is_empty
 			header_map_empty: header_map.is_empty
+			errors_cleared: parse_errors.is_empty
 		end
 
 feature -- Settings
@@ -486,6 +621,57 @@ feature -- Settings
 			delimiter_set: delimiter = a_delimiter
 		end
 
+feature -- Lenient Mode
+
+	lenient_mode: BOOLEAN
+			-- Is lenient parsing mode enabled?
+			-- When True, malformed rows are skipped and errors collected.
+
+	set_lenient_mode (a_lenient: BOOLEAN)
+			-- Enable or disable lenient parsing mode.
+		do
+			lenient_mode := a_lenient
+		ensure
+			lenient_set: lenient_mode = a_lenient
+		end
+
+	parse_errors: ARRAYED_LIST [STRING]
+			-- List of errors encountered during parsing (in lenient mode).
+
+	has_parse_errors: BOOLEAN
+			-- Were there any errors during parsing?
+		do
+			Result := not parse_errors.is_empty
+		end
+
+feature -- BOM Support
+
+	has_bom (a_input: STRING): BOOLEAN
+			-- Does `a_input' start with UTF-8 BOM?
+		require
+			input_not_void: a_input /= Void
+		do
+			Result := a_input.count >= 3 and then
+					  (a_input [1].code = 0xEF and
+					   a_input [2].code = 0xBB and
+					   a_input [3].code = 0xBF)
+		end
+
+	strip_bom (a_input: STRING): STRING
+			-- Return `a_input' with UTF-8 BOM removed if present.
+		require
+			input_not_void: a_input /= Void
+		do
+			if has_bom (a_input) then
+				Result := a_input.substring (4, a_input.count)
+			else
+				Result := a_input
+			end
+		ensure
+			result_not_void: Result /= Void
+			bom_stripped: not has_bom (Result)
+		end
+
 feature {NONE} -- Implementation
 
 	rows: ARRAYED_LIST [ARRAYED_LIST [STRING]]
@@ -499,6 +685,25 @@ feature {NONE} -- Implementation
 		require
 			row_not_void: a_row /= Void
 		do
+			rows.extend (a_row)
+		end
+
+	add_row_lenient (a_row: ARRAYED_LIST [STRING]; a_row_number: INTEGER)
+			-- Add a row to the data in lenient mode.
+			-- If row has wrong column count, log error and optionally skip.
+		require
+			row_not_void: a_row /= Void
+			lenient: lenient_mode
+		local
+			l_expected: INTEGER
+		do
+			if rows.count > 0 then
+				l_expected := rows.first.count
+				if a_row.count /= l_expected then
+					parse_errors.extend ("Row " + a_row_number.out + ": expected " + l_expected.out + " columns, got " + a_row.count.out)
+				end
+			end
+			-- Still add the row (lenient mode keeps data)
 			rows.extend (a_row)
 		end
 
@@ -554,12 +759,27 @@ feature {NONE} -- Implementation
 			result_not_void: Result /= Void
 		end
 
+feature -- Constants
+
+	Utf8_bom: STRING
+			-- UTF-8 Byte Order Mark.
+		once
+			create Result.make (3)
+			Result.append_character ((0xEF).to_character_8)
+			Result.append_character ((0xBB).to_character_8)
+			Result.append_character ((0xBF).to_character_8)
+		ensure
+			result_not_void: Result /= Void
+			correct_length: Result.count = 3
+		end
+
 invariant
 	rows_exist: rows /= Void
 	header_map_exists: header_map /= Void
 	valid_delimiter: delimiter /= '%N' and delimiter /= '%R'
 	valid_quote_char: quote_char /= '%N' and quote_char /= '%R'
 	delimiter_not_quote: delimiter /= quote_char
+	parse_errors_exist: parse_errors /= Void
 
 note
 	copyright: "Copyright (c) 2024-2025, Larry Rix"

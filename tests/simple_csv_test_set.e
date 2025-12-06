@@ -425,4 +425,254 @@ feature -- Test: Edge Cases
 			assert ("empty after clear", csv.is_empty)
 		end
 
+feature -- Test: BOM Support
+
+	test_has_bom_true
+			-- Test BOM detection with BOM present.
+		note
+			testing: "covers/{SIMPLE_CSV}.has_bom"
+		local
+			csv: SIMPLE_CSV
+			input: STRING
+		do
+			create csv.make
+			create input.make (10)
+			input.append_character ((0xEF).to_character_8)
+			input.append_character ((0xBB).to_character_8)
+			input.append_character ((0xBF).to_character_8)
+			input.append ("a,b")
+			assert ("has bom", csv.has_bom (input))
+		end
+
+	test_has_bom_false
+			-- Test BOM detection without BOM.
+		note
+			testing: "covers/{SIMPLE_CSV}.has_bom"
+		local
+			csv: SIMPLE_CSV
+		do
+			create csv.make
+			assert ("no bom", not csv.has_bom ("a,b,c"))
+		end
+
+	test_strip_bom
+			-- Test BOM stripping.
+		note
+			testing: "covers/{SIMPLE_CSV}.strip_bom"
+		local
+			csv: SIMPLE_CSV
+			input, result_str: STRING
+		do
+			create csv.make
+			create input.make (10)
+			input.append_character ((0xEF).to_character_8)
+			input.append_character ((0xBB).to_character_8)
+			input.append_character ((0xBF).to_character_8)
+			input.append ("a,b")
+			result_str := csv.strip_bom (input)
+			assert_strings_equal ("bom stripped", "a,b", result_str)
+		end
+
+	test_parse_with_bom
+			-- Test parsing CSV with BOM.
+		note
+			testing: "covers/{SIMPLE_CSV}.parse"
+		local
+			csv: SIMPLE_CSV
+			input: STRING
+		do
+			create csv.make
+			create input.make (20)
+			input.append_character ((0xEF).to_character_8)
+			input.append_character ((0xBB).to_character_8)
+			input.append_character ((0xBF).to_character_8)
+			input.append ("a,b%N1,2")
+			csv.parse (input)
+			assert_integers_equal ("row count", 2, csv.row_count)
+			assert_strings_equal ("first field", "a", csv.field (1, 1))
+		end
+
+	test_to_csv_with_bom
+			-- Test CSV generation with BOM.
+		note
+			testing: "covers/{SIMPLE_CSV}.to_csv_with_bom"
+		local
+			csv: SIMPLE_CSV
+			output: STRING
+		do
+			create csv.make
+			csv.add_data_row (<<"a", "b">>)
+			csv.add_data_row (<<"1", "2">>)
+			output := csv.to_csv_with_bom
+			assert ("has bom", csv.has_bom (output))
+			assert ("contains data", output.has_substring ("a,b"))
+		end
+
+feature -- Test: Lenient Mode
+
+	test_lenient_mode_default_off
+			-- Test lenient mode is off by default.
+		note
+			testing: "covers/{SIMPLE_CSV}.lenient_mode"
+		local
+			csv: SIMPLE_CSV
+		do
+			create csv.make
+			assert ("not lenient by default", not csv.lenient_mode)
+		end
+
+	test_set_lenient_mode
+			-- Test setting lenient mode.
+		note
+			testing: "covers/{SIMPLE_CSV}.set_lenient_mode"
+		local
+			csv: SIMPLE_CSV
+		do
+			create csv.make
+			csv.set_lenient_mode (True)
+			assert ("lenient enabled", csv.lenient_mode)
+			csv.set_lenient_mode (False)
+			assert ("lenient disabled", not csv.lenient_mode)
+		end
+
+	test_lenient_mode_logs_errors
+			-- Test lenient mode logs column count mismatches.
+		note
+			testing: "covers/{SIMPLE_CSV}.parse_errors", "covers/{SIMPLE_CSV}.has_parse_errors"
+		local
+			csv: SIMPLE_CSV
+		do
+			create csv.make
+			csv.set_lenient_mode (True)
+			-- First row has 3 columns, second has 2
+			csv.parse ("a,b,c%N1,2")
+			assert ("has errors", csv.has_parse_errors)
+			assert ("error logged", csv.parse_errors.count > 0)
+		end
+
+feature -- Test: Row Iteration
+
+	test_row_iteration
+			-- Test row-by-row iteration.
+		note
+			testing: "covers/{SIMPLE_CSV}.start_iteration", "covers/{SIMPLE_CSV}.next_row", "covers/{SIMPLE_CSV}.current_row"
+		local
+			csv: SIMPLE_CSV
+			count: INTEGER
+		do
+			create csv.make
+			csv.parse ("a,b%N1,2%N3,4")
+			csv.start_iteration
+			from
+				count := 0
+			until
+				not csv.next_row
+			loop
+				count := count + 1
+			end
+			assert_integers_equal ("iterated 3 rows", 3, count)
+		end
+
+	test_row_iteration_with_header
+			-- Test iteration skips header.
+		note
+			testing: "covers/{SIMPLE_CSV}.start_iteration", "covers/{SIMPLE_CSV}.next_row"
+		local
+			csv: SIMPLE_CSV
+			count: INTEGER
+		do
+			create csv.make_with_header
+			csv.parse ("name,age%Njohn,30%Njane,25")
+			csv.start_iteration
+			from
+				count := 0
+			until
+				not csv.next_row
+			loop
+				count := count + 1
+			end
+			assert_integers_equal ("iterated 2 data rows", 2, count)
+		end
+
+	test_current_field
+			-- Test getting current field during iteration.
+		note
+			testing: "covers/{SIMPLE_CSV}.current_field"
+		local
+			csv: SIMPLE_CSV
+		do
+			create csv.make
+			csv.parse ("a,b%N1,2")
+			csv.start_iteration
+			assert ("has next", csv.next_row)
+			assert_strings_equal ("first field", "a", csv.current_field (1))
+			assert ("has second row", csv.next_row)
+			assert_strings_equal ("second row first field", "1", csv.current_field (1))
+		end
+
+	test_current_field_by_name
+			-- Test getting current field by name during iteration.
+		note
+			testing: "covers/{SIMPLE_CSV}.current_field_by_name"
+		local
+			csv: SIMPLE_CSV
+		do
+			create csv.make_with_header
+			csv.parse ("name,age%Njohn,30%Njane,25")
+			csv.start_iteration
+			assert ("has next", csv.next_row)
+			assert_strings_equal ("john name", "john", csv.current_field_by_name ("name"))
+			assert ("has second row", csv.next_row)
+			assert_strings_equal ("jane name", "jane", csv.current_field_by_name ("name"))
+		end
+
+feature -- Test: Null Handling
+
+	test_is_null_empty_string
+			-- Test null detection with empty string (default behavior).
+		note
+			testing: "covers/{SIMPLE_CSV}.is_null"
+		local
+			csv: SIMPLE_CSV
+		do
+			create csv.make
+			-- Parses to: Row1: [a,b], Row2: [1,""], Row3: ["",4]
+			csv.parse ("a,b%N1,%N,4")
+			-- Default: empty string is null
+			assert ("a not null", not csv.is_null (1, 1))
+			assert ("b not null", not csv.is_null (1, 2))
+			assert ("1 not null", not csv.is_null (2, 1))
+			assert ("empty is null row 2 col 2", csv.is_null (2, 2))
+			assert ("empty is null row 3 col 1", csv.is_null (3, 1))
+		end
+
+	test_set_null_representation
+			-- Test custom null representation.
+		note
+			testing: "covers/{SIMPLE_CSV}.set_null_representation", "covers/{SIMPLE_CSV}.is_null"
+		local
+			csv: SIMPLE_CSV
+		do
+			create csv.make
+			csv.set_null_representation ("NULL")
+			csv.parse ("a,NULL%N1,2")
+			assert ("a not null", not csv.is_null (1, 1))
+			assert ("NULL is null", csv.is_null (1, 2))
+			assert ("1 not null", not csv.is_null (2, 1))
+		end
+
+	test_is_null_by_name
+			-- Test null detection by column name.
+		note
+			testing: "covers/{SIMPLE_CSV}.is_null_by_name"
+		local
+			csv: SIMPLE_CSV
+		do
+			create csv.make_with_header
+			csv.set_null_representation ("NA")
+			csv.parse ("name,value%Njohn,NA%Njane,100")
+			assert ("john value is null", csv.is_null_by_name (1, "value"))
+			assert ("jane value not null", not csv.is_null_by_name (2, "value"))
+		end
+
 end
